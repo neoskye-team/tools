@@ -6,11 +6,12 @@ public static class CompileActions
     {
         try
         {
-            var file = new FileInfo(src);
+            var srcFile = new FileInfo(src);
+            var destFile = new FileInfo(dest);
             Directory.CreateDirectory(
-                new FileInfo(dest).Directory?.ToString()!
+                destFile.Directory?.ToString()!
             );
-            file.CopyTo(dest);
+            srcFile.CopyTo(dest, true);
         }
         catch (Exception e)
         {
