@@ -63,7 +63,6 @@ public partial class ImGUIRenderer
         SDL_Rect oldViewport, oldClipRect;
         bool clipEnabled = SDL_RenderIsClipEnabled(ren) == SDL_bool.SDL_TRUE;
         code = SDL_RenderGetViewport(ren, out oldViewport);
-        CheckSDLError(code);
         SDL_RenderGetClipRect(ren, out oldClipRect);
 
         Vector2 clip_off = drawData.DisplayPos;         // (0,0) unless using multi-viewports
@@ -75,8 +74,8 @@ public partial class ImGUIRenderer
         {
             // Console.WriteLine("Drawing cmdlists");
             var cmdList = drawData.CmdListsRange[i];
-            var vtxBuffer = cmdList.VtxBuffer.Data;
-            var idxBuffer = cmdList.IdxBuffer.Data;
+            var vtxBuffer = cmdList.VtxBuffer;
+            var idxBuffer = cmdList.IdxBuffer;
             // Console.WriteLine("Buffers loaded");
             for (var cmd_i = 0; cmd_i < cmdList.CmdBuffer.Size; cmd_i++)
             {
@@ -106,27 +105,40 @@ public partial class ImGUIRenderer
                 r.w = (int)(clip_max.X - clip_min.Y);
                 r.h = (int)(clip_max.Y - clip_min.Y);
                 SDL_RenderSetClipRect(ren, ref r);
-                // Console.WriteLine("Clipping calculated");
-                var offsetOfPos = Marshal.OffsetOf(typeof(ImDrawVert), "pos");
-                var offsetOfUv = Marshal.OffsetOf(typeof(ImDrawVert), "uv");
-                var offsetOfCol = Marshal.OffsetOf(typeof(ImDrawVert), "col");
-                var xy = (float*)(void*)((char*)(vtxBuffer + pcmd.VtxOffset) + offsetOfPos);
-                var uv = (float*)(void*)((char*)(vtxBuffer + pcmd.VtxOffset) + offsetOfUv);
-                var col = (int*)(void*)((char*)(vtxBuffer + pcmd.VtxOffset) + offsetOfCol);
-                // Console.WriteLine("Got xy/uv/color");
+                var xy = vtxBuffer[(int)pcmd.VtxOffset].pos;
+                var uv = vtxBuffer[(int)pcmd.VtxOffset].uv;
+                var col = vtxBuffer[(int)pcmd.VtxOffset].col;
 
+                var xyarr = new float[] {
+                    xy.X,
+                    xy.Y,
+                };
+                var uvarr = new float[] {
+                    uv.X,
+                    uv.Y
+                };
+                Console.WriteLine($"xy: {xy.X}/{xy.Y}");
+                Console.WriteLine($"uv: {uv.X}/{uv.Y}");
+                var color = new int[]
+                {
+                    (byte)(col),
+                    (byte)(col >> 8),
+                    (byte)(col >> 16),
+                    (byte)(col >> 24),
+                };
 
                 var tex = pcmd.GetTexID();
 
-                // uv breaks here (and probably other things)
-                code = SDL_RenderGeometryRaw(ren, tex,
-                    xy, sizeof(ImDrawVert),
-                    col, sizeof(ImDrawVert),
-                    uv, sizeof(ImDrawVert),
-                    (int)(cmdList.VtxBuffer.Size - pcmd.VtxOffset),
-                    (IntPtr)(idxBuffer + pcmd.IdxOffset), (int)pcmd.ElemCount, sizeof(ushort)
+                var verticiesCount = vtxBuffer.Size - pcmd.VtxOffset;
+                code = SDL_RenderGeometryRaw(
+                    ren, tex,
+                    xyarr, sizeof(ImDrawVert),
+                    color, sizeof(ImDrawVert),
+                    uvarr, sizeof(ImDrawVert),
+                    (int)verticiesCount,
+                    (nint)(idxBuffer.Data + pcmd.IdxOffset), (int)pcmd.ElemCount, sizeof(ushort)
                 );
-                CheckSDLError(code);
+                Console.WriteLine(SDL_GetError());
                 // Console.WriteLine("Rendered geometry");
             }
         }
@@ -147,20 +159,4 @@ public partial class ImGUIRenderer
         SDL_RenderSetClipRect(ren, IntPtr.Zero);
         return true;
     }
-
-    private void CheckSDLError(int status, string msg = "SDL Error")
-    {
-        if (status != 0)
-            Console.WriteLine($"{msg}: {SDL_GetError()}");
-    }
-
-    [DllImport("SDL2", CallingConvention = CallingConvention.Cdecl)]
-    public static unsafe extern int SDL_RenderGeometryRaw(
-        IntPtr renderer, IntPtr texture,
-        [In] float* xy, int xy_stride,
-        [In] int* color, int color_stride,
-        [In] float* uv, int uv_stride,
-        int num_vertices,
-        IntPtr indices, int num_indices, int size_indices
-    );
 }
